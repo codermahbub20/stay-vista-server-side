@@ -117,11 +117,21 @@ async function run() {
     })
 
 
-    // Save rooms in database 
-    app.post('/rooms', verifyToken, async(req,res)=>{
-      const room = req.body;
-      const result = roomsCollection.insertOne(room);
-      res.send(result);
+     // Save a room in database
+     app.post('/rooms', verifyToken, async (req, res) => {
+      const room = req.body
+      const result = await roomsCollection.insertOne(room)
+      res.send(result)
+    })
+
+
+    //get rooms for host
+    app.get('/rooms/:email', async (req, res) => {
+      const email = req.params.email
+      const result = await roomsCollection
+        .find({ 'host.email': email })
+        .toArray()
+      res.send(result)
     })
 
     // Send a ping to confirm a successful connection
