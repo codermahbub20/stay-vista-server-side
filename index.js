@@ -50,6 +50,7 @@ async function run() {
 
     const usersCollection = client.db('stayVistaDb').collection('users')
     const roomsCollection = client.db('stayVistaDb').collection('rooms')
+    const bookingsCollection = client.db('stayVistaDb').collection('bookings')
 
 
     // auth related api
@@ -156,6 +157,12 @@ async function run() {
       res.send({clientSecret: client_secret})
     })
 
+    // Save booking collection 
+    app.post('/booking',verifyToken,async(req,res)=>{
+      const booking = req.body
+      const result = await bookingsCollection.insertOne(booking)
+      res.send(result)
+    })
 
 
     // Send a ping to confirm a successful connection
