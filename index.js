@@ -164,6 +164,20 @@ async function run() {
       res.send(result)
     })
 
+    // updated booked room info
+    app.patch('/rooms/status/:id',async(req,res)=>{
+      const id = req.params.id
+      const status = req.body
+      const query = {_id: new ObjectId(id)}
+      const updatedDoc = {
+        $set:{
+          booked:status,
+        }
+      }
+      const result = await roomsCollection.updateOne(query,updatedDoc)
+      res.send(result)
+    })
+
 
     // Send a ping to confirm a successful connection
     await client.db('admin').command({ ping: 1 })
