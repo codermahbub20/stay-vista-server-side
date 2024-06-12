@@ -9,6 +9,7 @@ const morgan = require('morgan')
 const port = process.env.PORT || 5000
 
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY )
+const nodemailer = require('nodemailer');
 
 // middleware
 const corsOptions = {
@@ -36,6 +37,45 @@ const verifyToken = async (req, res, next) => {
   })
 }
 
+// Send email
+// const sendEmail = (emailAddress, emailData) => {
+//   //Create a transporter
+//   const transporter = nodemailer.createTransport({
+//     service: 'gmail',
+//     host: 'smtp.gmail.com',
+//     port: 587,
+//     secure: false,
+//     auth: {
+//       user: process.env.MAIL,
+//       pass: process.env.PASS,
+//     },
+//   })
+
+//   //verify connection
+//   transporter.verify((error, success) => {
+//     if (error) {
+//       console.log(error)
+//     } else {
+//       console.log('Server is ready to take our emails', success)
+//     }
+//   })
+// }
+
+
+// const mailBody = {
+//   from: process.env.MAIL,
+//   to: emailAddress,
+//   subject: emailData?.subject,
+//   html: `<p>${emailData?.message}</p>`,
+// }
+
+// transporter.sendMail(mailBody, (error, info) => {
+//   if (error) {
+//     console.log(error)
+//   } else {
+//     console.log('Email sent: ' + info.response)
+//   }
+// })
 
 
 
@@ -53,6 +93,28 @@ async function run() {
     const usersCollection = client.db('stayVistaDb').collection('users')
     const roomsCollection = client.db('stayVistaDb').collection('rooms')
     const bookingsCollection = client.db('stayVistaDb').collection('bookings')
+
+     // Role verification middlewares
+    // For admins
+    const verifyAdmin = async (req, res, next) => {
+      const user = req.user
+      console.log('user from verify admin', user)
+      const query = { email: user?.email }
+      const result = await usersCollection.findOne(query)
+      if (!result || result?.role !== 'admin')
+        return res.status(401).send({ message: 'unauthorized access' })
+      next()
+    }
+
+    // For hosts
+    const verifyHost = async (req, res, next) => {
+      const user = req.user
+      const query = { email: user?.email }
+      const result = await usersCollection.findOne(query)
+      if (!result || result?.role !== 'host')
+        return res.status(401).send({ message: 'unauthorized access' })
+      next()
+    }
 
 
     // auth related api
@@ -110,7 +172,20 @@ async function run() {
       const options = { upsert: true }
       const isExist = await usersCollection.findOne(query)
       console.log('User found?----->', isExist)
-      if (isExist) return res.send(isExist)
+      if (isExist) {
+        if (user?.status === 'Requested') {
+          const result = await usersCollection.updateOne(
+            query,
+            {
+              $set: user,
+            },
+            options
+          )
+          return res.send(result)
+        } else {
+          return res.send(isExist)
+        }
+      }
       const result = await usersCollection.updateOne(
         query,
         {
@@ -118,6 +193,13 @@ async function run() {
         },
         options
       )
+      res.send(result)
+    })
+
+    // Get user role
+    app.get('/user/:email', async (req, res) => {
+      const email = req.params.email
+      const result = await usersCollection.findOne({ email })
       res.send(result)
     })
 
@@ -202,7 +284,7 @@ async function run() {
 
 
 // Get all users
-app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+app.get('/users', verifyToken,  async (req, res) => {
   const result = await usersCollection.find().toArray()
   res.send(result)
 })
@@ -225,6 +307,32 @@ app.put('/users/update/:email', verifyToken, async (req, res) => {
 
 
 
+  // Admin Stat Data
+  app.get('/admin-stat', verifyToken,  async (req, res) => {
+    const bookingsDetails = await bookingsCollection
+      .find({}, { projection: { date: 1, price: 1 } })
+      .toArray()
+    const userCount = await usersCollection.countDocuments()
+    const roomCount = await roomsCollection.countDocuments()
+    const totalSale = bookingsDetails.reduce(
+      (sum, data) => sum + data.price,
+      0
+    )
+
+    const chartData = bookingsDetails.map(data => {
+      const day = new Date(data.date).getDate()
+      const month = new Date(data.date).getMonth() + 1
+      return [day + '/' + month, data.price]
+    })
+    chartData.unshift(['Day', 'Sale'])
+    res.send({
+      totalSale,
+      bookingCount: bookingsDetails.length,
+      userCount,
+      roomCount,
+      chartData,
+    })
+  })
 
 
     // Send a ping to confirm a successful connection
