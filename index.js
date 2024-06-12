@@ -38,6 +38,8 @@ const verifyToken = async (req, res, next) => {
 
 
 
+
+
 const client = new MongoClient(process.env.DB_URI, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -144,25 +146,26 @@ async function run() {
     })
 
 
-    // Generate Client Secret
-    app.post('/create-payment-intent',verifyToken,async(req,res)=>{
-      const price = req.body
+     // Generate client secret for stripe payment
+     app.post('/create-payment-intent', verifyToken, async (req, res) => {
+      const { price } = req.body
       const amount = parseInt(price * 100)
-      if(!price || amount < 1) return
-      const {client_secret} = await stripe.paymentIntents.create({
+      if (!price || amount < 1) return
+      const { client_secret } = await stripe.paymentIntents.create({
         amount: amount,
         currency: 'usd',
-        payment_method_types: ['card']
+        payment_method_types: ['card'],
       })
-      res.send({clientSecret: client_secret})
+      res.send({ clientSecret: client_secret })
     })
 
     // Save booking collection 
-    app.post('/booking',verifyToken,async(req,res)=>{
+    app.post('/bookings', verifyToken, async (req, res) => {
       const booking = req.body
       const result = await bookingsCollection.insertOne(booking)
       res.send(result)
     })
+
 
     // updated booked room info
     app.patch('/rooms/status/:id',async(req,res)=>{
@@ -177,6 +180,51 @@ async function run() {
       const result = await roomsCollection.updateOne(query,updatedDoc)
       res.send(result)
     })
+
+
+     // Get all bookings for guest
+     app.get('/bookings', verifyToken, async (req, res) => {
+      const email = req.query.email
+      if (!email) return res.send([])
+      const query = { 'guest.email': email }
+      const result = await bookingsCollection.find(query).toArray()
+      res.send(result)
+    })
+
+    // Get all bookings for host
+    app.get('/bookings/host', verifyToken,  async (req, res) => {
+      const email = req.query.email
+      if (!email) return res.send([])
+      const query = { host: email }
+      const result = await bookingsCollection.find(query).toArray()
+      res.send(result)
+    })
+
+
+// Get all users
+app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+  const result = await usersCollection.find().toArray()
+  res.send(result)
+})
+
+// Update user role
+app.put('/users/update/:email', verifyToken, async (req, res) => {
+  const email = req.params.email
+  const user = req.body
+  const query = { email: email }
+  const options = { upsert: true }
+  const updateDoc = {
+    $set: {
+      ...user,
+      timestamp: Date.now(),
+    },
+  }
+  const result = await usersCollection.updateOne(query, updateDoc, options)
+  res.send(result)
+})
+
+
+
 
 
     // Send a ping to confirm a successful connection
